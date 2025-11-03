@@ -816,7 +816,7 @@
                             <strong>Ответ Елены Сергеевны:</strong><br>${result.data.answer}
                         </div>
                         <div style="color: #666; font-size: 0.9em;">
-                            Ответ от: ${new Date(result.data.createdAt).toLocaleString('ru-RU')}
+                            Ответ от: ${new Date(result.data.created_at).toLocaleString('ru-RU')}
                         </div>
                     `;
                 } else {
@@ -872,50 +872,79 @@
                 if (result.success) {
                     const letters = result.data;
                     totalLetters.textContent = letters.length;
-                    unansweredCount.textContent = letters.length;
+                    
+                    // Считаем неотвеченные
+                    const unanswered = letters.filter(letter => !letter.answered).length;
+                    unansweredCount.textContent = unanswered;
                     
                     if (letters.length === 0) {
                         lettersList.innerHTML = '<p style="text-align: center; color: #666;">📭 Писем пока нет</p>';
                         return;
                     }
                     
-                    // Загружаем ответы для определения статуса
-                    let answeredCodes = [];
-                    try {
-                        const answersResponse = await fetch(SERVER_URL + '/get-all-answers');
-                        const answersResult = await answersResponse.json();
-                        if (answersResult.success) {
-                            answeredCodes = answersResult.data.map(a => a.code);
-                        }
-                    } catch (error) {
-                        console.log('Не удалось загрузить ответы');
-                    }
-                    
+                    // Создаем HTML для каждого письма
                     lettersList.innerHTML = letters.map(letter => {
-                        const isAnswered = answeredCodes.includes(letter.code);
+                        const isAnswered = letter.answered;
+                        const shortMessage = letter.message.length > 100 ? 
+                            letter.message.substring(0, 100) + '...' : 
+                            letter.message;
+                        
                         return `
-                            <div class="letter-item ${isAnswered ? 'answered' : ''}" onclick="loadLetterForAnswer('${letter.code}', \`${letter.message.replace(/`/g, '\\`')}\`)">
-                                <div class="letter-code">Код: ${letter.code}</div>
-                                <div class="letter-category">${letter.category}</div>
-                                <div style="margin: 8px 0; font-size: 0.9em;">${letter.message.substring(0, 100)}${letter.message.length > 100 ? '...' : ''}</div>
-                                <div class="letter-date">${new Date(letter.createdAt).toLocaleString('ru-RU')}</div>
-                                ${isAnswered ? '<div style="color: #4CAF50; margin-top: 5px;">✅ Отвечено</div>' : '<div style="color: #ff9800; margin-top: 5px;">⏳ Ждет ответа</div>'}
+                            <div class="letter-item ${isAnswered ? 'answered' : ''}" 
+                                 onclick="selectLetterForAnswer('${letter.code}', '${letter.message.replace(/'/g, "\\'").replace(/"/g, '&quot;')}')"
+                                 style="cursor: pointer; padding: 15px; margin: 10px 0; border-radius: 8px; border-left: 4px solid ${isAnswered ? '#4CAF50' : '#2196F3'}; background: white;">
+                                <div class="letter-code" style="font-weight: bold; color: #2196F3;">Код: ${letter.code}</div>
+                                <div class="letter-category" style="color: #666; margin: 5px 0;">${letter.category}</div>
+                                <div style="margin: 8px 0; font-size: 0.9em; color: #333;">${shortMessage}</div>
+                                <div class="letter-date" style="color: #999; font-size: 0.8em;">${new Date(letter.created_at).toLocaleString('ru-RU')}</div>
+                                <button onclick="selectLetterForAnswer('${letter.code}', '${letter.message.replace(/'/g, "\\'").replace(/"/g, '&quot;')}')" 
+                                        style="background: #4CAF50; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; margin-top: 10px; width: 100%;">
+                                    ✍️ Ответить на это письмо
+                                </button>
+                                ${isAnswered ? 
+                                    '<div style="color: #4CAF50; margin-top: 5px;">✅ Отвечено</div>' : 
+                                    '<div style="color: #ff9800; margin-top: 5px;">⏳ Ждет ответа</div>'
+                                }
                             </div>
                         `;
                     }).join('');
+                    
+                    console.log('✅ Письма загружены и отображены');
+                    
                 } else {
                     lettersList.innerHTML = '<p>❌ Ошибка загрузки писем</p>';
                 }
                 
             } catch (error) {
+                console.error('❌ Ошибка загрузки писем:', error);
                 lettersList.innerHTML = '<p>❌ Ошибка загрузки. Проверь соединение.</p>';
             }
         }
 
-        function loadLetterForAnswer(code, question) {
+        // Выбор письма для ответа
+        function selectLetterForAnswer(code, question) {
+            console.log('📝 Выбрано письмо для ответа:', code);
+            
+            // Устанавливаем код
             document.getElementById('answer-code').value = code;
-            document.getElementById('student-question').value = question;
+            
+            // Устанавливаем вопрос (декодируем специальные символы)
+            const decodedQuestion = question
+                .replace(/\\'/g, "'")
+                .replace(/&quot;/g, '"');
+            
+            document.getElementById('student-question').value = decodedQuestion;
+            
+            // Фокусируемся на поле ответа
             document.getElementById('psychologist-answer').focus();
+            
+            // Прокручиваем к форме ответа
+            document.getElementById('psychologist-answer').scrollIntoView({ behavior: 'smooth' });
+            
+            console.log('✅ Поля заполнены:', {
+                code: code,
+                question: decodedQuestion.substring(0, 50) + '...'
+            });
         }
 
         // Сохранение ответа психолога
